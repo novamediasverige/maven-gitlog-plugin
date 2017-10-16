@@ -52,7 +52,7 @@ class Generator {
 		walk = createWalk(repository);
 		log.debug("Loaded commits. about to load the tags.");
 		allTaggedCommits = taggedCommits(repository, walk);
-		log.debug("Loaded tag map: " + allTaggedCommits);
+		log.debug("Loaded tagged commits: " + allTaggedCommits);
 
 		return repository;
 	}
@@ -68,9 +68,7 @@ class Generator {
 
 		long includeCommitsAfterSecondsSinceEpoch = includeCommitsAfter.getTime() / 1000;
 
-		List<RevCommit> allCommits = getAllCommits();
-
-		List<RevCommit> commits = removeOlderThan(allCommits, includeCommitsAfterSecondsSinceEpoch);
+		List<RevCommit> commits = getAllCommits(includeCommitsAfterSecondsSinceEpoch);
 
 		ArrayList<Pair<RevCommit, ArrayList<RevTag>>> taggedCommits = removeTaggedCommitsOlderThan(allTaggedCommits, includeCommitsAfterSecondsSinceEpoch);
 		sortTaggedCommitsOldestFirst(taggedCommits);
@@ -81,7 +79,7 @@ class Generator {
 		// Reverse the list of tagged commits to get the latest first
 		Collections.reverse(taggedCommits);
 
-		render(includeCommitsAfterSecondsSinceEpoch, taggedCommits, mergedCommitsMap);
+		render(taggedCommits, mergedCommitsMap);
 
 		for (ChangeLogRenderer renderer : renderers) {
 			renderer.renderFooter();
@@ -89,10 +87,12 @@ class Generator {
 		}
 	}
 
-	private List<RevCommit> getAllCommits() {
+	private List<RevCommit> getAllCommits(long includeCommitsAfterSecondsSinceEpoch) {
 		List<RevCommit> allCommits = new ArrayList<RevCommit>();
 		for (RevCommit revCommit : walk) {
-			allCommits.add(revCommit);
+			if (revCommit.getCommitTime() >= includeCommitsAfterSecondsSinceEpoch) {
+				allCommits.add(revCommit);
+			}
 		}
 		return allCommits;
 	}
@@ -114,21 +114,19 @@ class Generator {
 		return mergedCommitsMap;
 	}
 
-	private void render(long includeCommitsAfterSecondsSinceEpoch, List<Pair<RevCommit, ArrayList<RevTag>>> taggedCommits, Map<String, List<RevCommit>> mergedCommitsMap) throws IOException {
+	private void render(List<Pair<RevCommit, ArrayList<RevTag>>> taggedCommits, Map<String, List<RevCommit>> mergedCommitsMap) throws IOException {
 		for (Pair<RevCommit, ArrayList<RevTag>> taggedCommit : taggedCommits) {
-			if (includeCommitsAfterSecondsSinceEpoch < taggedCommit.getLeft().getCommitTime()) {
-				for (ChangeLogRenderer renderer : renderers) {
-					for (RevTag revTag : taggedCommit.getRight()) {
-						renderer.renderTag(revTag);
-					}
+			for (ChangeLogRenderer renderer : renderers) {
+				for (RevTag revTag : taggedCommit.getRight()) {
+					renderer.renderTag(revTag);
 				}
+			}
 
-				List<RevCommit> revCommits = mergedCommitsMap.get(taggedCommit.getLeft().name());
-				for (RevCommit revCommit : revCommits) {
-					if (show(revCommit)) {
-						for (ChangeLogRenderer renderer : renderers) {
-							renderer.renderCommit(revCommit);
-						}
+			List<RevCommit> revCommits = mergedCommitsMap.get(taggedCommit.getLeft().name());
+			for (RevCommit revCommit : revCommits) {
+				if (show(revCommit)) {
+					for (ChangeLogRenderer renderer : renderers) {
+						renderer.renderCommit(revCommit);
 					}
 				}
 			}
@@ -139,16 +137,6 @@ class Generator {
 		ArrayList<Pair<RevCommit, ArrayList<RevTag>>> commitsToKeep = new ArrayList<Pair<RevCommit, ArrayList<RevTag>>>();
 		for (Pair<RevCommit, ArrayList<RevTag>> commit : taggedCommits) {
 			if (commit.getLeft().getCommitTime() >= includeCommitsAfterSecondsSinceEpoch) {
-				commitsToKeep.add(commit);
-			}
-		}
-		return commitsToKeep;
-	}
-
-	private List<RevCommit> removeOlderThan(List<RevCommit> commits, long includeCommitsAfterSecondsSinceEpoch) {
-		List<RevCommit> commitsToKeep = new ArrayList<RevCommit>();
-		for (RevCommit commit : commits) {
-			if (commit.getCommitTime() >= includeCommitsAfterSecondsSinceEpoch) {
 				commitsToKeep.add(commit);
 			}
 		}
